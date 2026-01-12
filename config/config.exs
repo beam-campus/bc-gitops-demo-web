@@ -14,6 +14,7 @@ config :demo_web,
 config :bc_gitops,
   repo_url: "https://github.com/beam-campus/bc-gitops-demo-repo.git",
   branch: "master",
+  local_path: "_bc_gitops",  # Local directory for git clone (relative to project root)
   reconcile_interval: 30_000,
   runtime_module: :bc_gitops_runtime_default
 

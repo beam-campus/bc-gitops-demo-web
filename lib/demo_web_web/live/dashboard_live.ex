@@ -80,10 +80,31 @@ defmodule DemoWebWeb.DashboardLive do
 
   defp fetch_apps do
     case :bc_gitops.get_current_state() do
-      {:ok, apps} -> apps
-      _ -> %{}
+      {:ok, apps} when is_map(apps) ->
+        # Convert Erlang records to maps
+        Map.new(apps, fn {name, app} -> {name, record_to_map(app)} end)
+      _ ->
+        %{}
     end
   end
+
+  # Convert Erlang #app_state{} record to a map
+  # Record format: {:app_state, name, version, status, path, pid, started_at, health, env}
+  defp record_to_map({:app_state, name, version, status, path, pid, started_at, health, env}) do
+    %{
+      name: name,
+      version: version,
+      status: status,
+      path: path,
+      pid: pid,
+      started_at: started_at,
+      health: health,
+      env: env
+    }
+  end
+
+  defp record_to_map(other) when is_map(other), do: other
+  defp record_to_map(_), do: %{}
 
   @impl true
   def render(assigns) do

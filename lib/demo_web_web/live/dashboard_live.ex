@@ -743,17 +743,31 @@ defmodule DemoWebWeb.DashboardLive do
         </span>
       </div>
 
-      <!-- App name if present -->
+      <!-- App name and version if present -->
       <%= if @event.metadata[:app] do %>
-        <p class="text-gray-400 text-xs mt-1">
-          App: <span class="font-medium text-gray-300"><%= @event.metadata[:app] %></span>
-        </p>
+        <div class="flex items-center gap-2 mt-1">
+          <span class="text-gray-400 text-xs">App:</span>
+          <span class="font-medium text-gray-300 text-xs"><%= @event.metadata[:app] %></span>
+          <%= if version = extract_version(@event.metadata[:result]) do %>
+            <span class="text-xs text-purple-400 bg-purple-900/30 px-1.5 rounded">v<%= version %></span>
+          <% end %>
+        </div>
+      <% end %>
+
+      <!-- Git info (for git:pull events showing config repo) -->
+      <%= if @event.event == [:bc_gitops, :git, :pull] do %>
+        <div class="flex items-center gap-2 mt-1 text-xs">
+          <span class="text-gray-500">Config:</span>
+          <span class="text-cyan-400 font-mono"><%= @event.metadata[:repo] || "_bc_gitops" %></span>
+          <span class="text-gray-600">→</span>
+          <span class="text-yellow-400"><%= @event.metadata[:branch] || "master" %></span>
+        </div>
       <% end %>
 
       <!-- Duration for stop events -->
       <%= if @event.measurements[:duration] do %>
-        <p class="text-gray-500 text-xs">
-          Duration: <%= format_duration(@event.measurements[:duration]) %>
+        <p class="text-gray-500 text-xs mt-1">
+          Duration: <span class="text-gray-400"><%= format_duration(@event.measurements[:duration]) %></span>
         </p>
       <% end %>
 
@@ -762,18 +776,18 @@ defmodule DemoWebWeb.DashboardLive do
         <.result_detail result={result} />
       <% end %>
 
+      <!-- Status for reconcile stop -->
+      <%= if @event.event == [:bc_gitops, :reconcile, :stop] && @event.metadata[:status] do %>
+        <p class="text-xs mt-1">
+          Status: <span class={"font-medium " <> reconcile_status_color(@event.metadata[:status])}><%= @event.metadata[:status] %></span>
+        </p>
+      <% end %>
+
       <!-- Error details -->
       <%= if @event.metadata[:error] do %>
         <div class="mt-2 p-2 bg-red-900/30 rounded text-xs font-mono text-red-300 overflow-x-auto">
           <%= inspect(@event.metadata[:error], pretty: true, limit: 5) %>
         </div>
-      <% end %>
-
-      <!-- Git info -->
-      <%= if @event.metadata[:branch] do %>
-        <p class="text-gray-500 text-xs">
-          Branch: <span class="text-gray-400"><%= @event.metadata[:branch] %></span>
-        </p>
       <% end %>
     </div>
     """
@@ -785,11 +799,28 @@ defmodule DemoWebWeb.DashboardLive do
     ~H"""
     <%= case @result do %>
       <% {:ok, app_state} when is_tuple(app_state) -> %>
-        <div class="mt-1 text-xs text-green-400 flex items-center gap-1">
-          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-          </svg>
-          Success
+        <div class="mt-1 space-y-1">
+          <div class="text-xs text-green-400 flex items-center gap-1">
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+            </svg>
+            Success
+          </div>
+          <!-- Show status and health from app_state -->
+          <%= if {status, health} = extract_status_health(app_state) do %>
+            <div class="flex items-center gap-3 text-xs">
+              <span class="text-gray-500">Status:</span>
+              <span class={"font-medium " <> app_status_color(status)}><%= status %></span>
+              <span class="text-gray-500">Health:</span>
+              <span class={"font-medium " <> health_color(health)}><%= health %></span>
+            </div>
+          <% end %>
+          <!-- Show path if present -->
+          <%= if path = extract_path(app_state) do %>
+            <div class="text-xs text-gray-500 font-mono truncate max-w-xs" title={path}>
+              <%= path %>
+            </div>
+          <% end %>
         </div>
       <% {:error, reason} -> %>
         <div class="mt-2 p-2 bg-red-900/30 rounded text-xs">
@@ -888,6 +919,30 @@ defmodule DemoWebWeb.DashboardLive do
   defp event_name([:bc_gitops, :remove, :stop]), do: "Remove complete"
   defp event_name([:bc_gitops, :git, :pull]), do: "Git pull"
   defp event_name(event), do: inspect(event)
+
+  # Extract version from result's app_state tuple
+  # app_state = {:app_state, name, version, status, path, pid, started_at, health, env}
+  defp extract_version({:ok, {:app_state, _name, version, _status, _path, _pid, _started, _health, _env}}), do: version
+  defp extract_version(_), do: nil
+
+  # Extract status and health from app_state tuple
+  defp extract_status_health({:app_state, _name, _version, status, _path, _pid, _started, health, _env}), do: {status, health}
+  defp extract_status_health(_), do: nil
+
+  # Extract path from app_state tuple
+  defp extract_path({:app_state, _name, _version, _status, path, _pid, _started, _health, _env}), do: to_string(path)
+  defp extract_path(_), do: nil
+
+  defp reconcile_status_color(:success), do: "text-green-400"
+  defp reconcile_status_color(:error), do: "text-red-400"
+  defp reconcile_status_color(:partial), do: "text-yellow-400"
+  defp reconcile_status_color(_), do: "text-gray-400"
+
+  defp app_status_color(:running), do: "text-green-400"
+  defp app_status_color(:stopped), do: "text-gray-400"
+  defp app_status_color(:failed), do: "text-red-400"
+  defp app_status_color(:starting), do: "text-yellow-400"
+  defp app_status_color(_), do: "text-gray-400"
 
   defp event_text_color([:bc_gitops, :reconcile, :start]), do: "text-blue-400"
   defp event_text_color([:bc_gitops, :reconcile, :stop]), do: "text-green-400"

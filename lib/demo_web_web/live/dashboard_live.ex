@@ -186,11 +186,15 @@ defmodule DemoWebWeb.DashboardLive do
   end
 
   defp fetch_apps do
-    case :bc_gitops.get_current_state() do
-      {:ok, apps} when is_map(apps) ->
-        Map.new(apps, fn {name, app} -> {name, record_to_map(app)} end)
-      _ ->
-        %{}
+    try do
+      case :bc_gitops.get_current_state() do
+        {:ok, apps} when is_map(apps) ->
+          Map.new(apps, fn {name, app} -> {name, record_to_map(app)} end)
+        _ ->
+          %{}
+      end
+    catch
+      :exit, {:timeout, _} -> %{}
     end
   end
 

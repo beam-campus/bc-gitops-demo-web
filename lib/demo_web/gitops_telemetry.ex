@@ -10,16 +10,27 @@ defmodule DemoWeb.GitopsTelemetry do
   """
   def attach do
     events = [
+      # Reconciliation
       [:bc_gitops, :reconcile, :start],
       [:bc_gitops, :reconcile, :stop],
       [:bc_gitops, :reconcile, :error],
+      # Deploy/upgrade/remove
       [:bc_gitops, :deploy, :start],
       [:bc_gitops, :deploy, :stop],
       [:bc_gitops, :upgrade, :start],
       [:bc_gitops, :upgrade, :stop],
       [:bc_gitops, :remove, :start],
       [:bc_gitops, :remove, :stop],
-      [:bc_gitops, :git, :pull]
+      # Git operations
+      [:bc_gitops, :git, :pull],
+      [:bc_gitops, :git, :clone_start],
+      [:bc_gitops, :git, :clone_stop],
+      # Build pipeline
+      [:bc_gitops, :deps, :start],
+      [:bc_gitops, :deps, :stop],
+      [:bc_gitops, :build, :start],
+      [:bc_gitops, :build, :stop],
+      [:bc_gitops, :code, :load]
     ]
 
     :telemetry.attach_many(

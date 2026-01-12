@@ -764,6 +764,61 @@ defmodule DemoWebWeb.DashboardLive do
         </p>
       <% end %>
 
+      <!-- Git clone events - show URL and ref -->
+      <%= if @event.event in [[:bc_gitops, :git, :clone_start], [:bc_gitops, :git, :clone_stop]] do %>
+        <%= if @event.metadata[:url] do %>
+          <p class="text-xs mt-1">
+            <span class="text-gray-500">Source:</span>
+            <span class="text-cyan-400 font-mono ml-1 truncate max-w-[200px] inline-block align-bottom"><%= @event.metadata[:url] %></span>
+            <%= if @event.metadata[:ref] do %>
+              <span class="text-gray-500 mx-1">@</span>
+              <span class="text-yellow-400"><%= @event.metadata[:ref] %></span>
+            <% end %>
+          </p>
+        <% end %>
+        <%= if @event.metadata[:status] && @event.event == [:bc_gitops, :git, :clone_stop] do %>
+          <p class="text-xs mt-1">
+            <span class={if @event.metadata[:status] == :success, do: "text-green-400", else: "text-red-400"}>
+              <%= if @event.metadata[:status] == :success, do: "✓ Cloned successfully", else: "✗ Clone failed" %>
+            </span>
+          </p>
+        <% end %>
+      <% end %>
+
+      <!-- Deps events - show tool -->
+      <%= if @event.event in [[:bc_gitops, :deps, :start], [:bc_gitops, :deps, :stop]] do %>
+        <p class="text-xs mt-1">
+          <span class="text-gray-500">Tool:</span>
+          <span class="text-indigo-400 font-mono ml-1"><%= @event.metadata[:tool] || "unknown" %></span>
+          <%= if @event.metadata[:status] && @event.event == [:bc_gitops, :deps, :stop] do %>
+            <span class={if @event.metadata[:status] == :success, do: "ml-2 text-green-400", else: "ml-2 text-red-400"}>
+              <%= if @event.metadata[:status] == :success, do: "✓", else: "✗" %>
+            </span>
+          <% end %>
+        </p>
+      <% end %>
+
+      <!-- Build events - show tool -->
+      <%= if @event.event in [[:bc_gitops, :build, :start], [:bc_gitops, :build, :stop]] do %>
+        <p class="text-xs mt-1">
+          <span class="text-gray-500">Tool:</span>
+          <span class="text-amber-400 font-mono ml-1"><%= @event.metadata[:tool] || "unknown" %></span>
+          <%= if @event.metadata[:status] && @event.event == [:bc_gitops, :build, :stop] do %>
+            <span class={if @event.metadata[:status] == :success, do: "ml-2 text-green-400", else: "ml-2 text-red-400"}>
+              <%= if @event.metadata[:status] == :success, do: "✓", else: "✗" %>
+            </span>
+          <% end %>
+        </p>
+      <% end %>
+
+      <!-- Code load events - show paths count -->
+      <%= if @event.event == [:bc_gitops, :code, :load] do %>
+        <p class="text-xs mt-1">
+          <span class="text-gray-500">Loaded:</span>
+          <span class="text-emerald-400 ml-1"><%= @event.metadata[:paths_count] || "?" %> ebin paths</span>
+        </p>
+      <% end %>
+
       <!-- Duration for stop events -->
       <%= if @event.measurements[:duration] do %>
         <p class="text-gray-500 text-xs mt-1">
@@ -908,16 +963,36 @@ defmodule DemoWebWeb.DashboardLive do
   defp truncate_commit(commit) when is_binary(commit), do: String.slice(commit, 0, 7)
   defp truncate_commit(_), do: "-"
 
+  # Reconciliation
   defp event_name([:bc_gitops, :reconcile, :start]), do: "Reconcile started"
   defp event_name([:bc_gitops, :reconcile, :stop]), do: "Reconcile complete"
   defp event_name([:bc_gitops, :reconcile, :error]), do: "Reconcile error"
+
+  # Deploy/upgrade/remove
   defp event_name([:bc_gitops, :deploy, :start]), do: "Deploy started"
   defp event_name([:bc_gitops, :deploy, :stop]), do: "Deploy complete"
   defp event_name([:bc_gitops, :upgrade, :start]), do: "Upgrade started"
   defp event_name([:bc_gitops, :upgrade, :stop]), do: "Upgrade complete"
   defp event_name([:bc_gitops, :remove, :start]), do: "Remove started"
   defp event_name([:bc_gitops, :remove, :stop]), do: "Remove complete"
+
+  # Git operations
   defp event_name([:bc_gitops, :git, :pull]), do: "Git pull"
+  defp event_name([:bc_gitops, :git, :clone_start]), do: "Git clone"
+  defp event_name([:bc_gitops, :git, :clone_stop]), do: "Clone complete"
+
+  # Build operations
+  defp event_name([:bc_gitops, :deps, :start]), do: "Fetching deps"
+  defp event_name([:bc_gitops, :deps, :stop]), do: "Deps complete"
+  defp event_name([:bc_gitops, :build, :start]), do: "Building"
+  defp event_name([:bc_gitops, :build, :stop]), do: "Build complete"
+  defp event_name([:bc_gitops, :code, :load]), do: "Code loaded"
+
+  # Config/health
+  defp event_name([:bc_gitops, :parse, :start]), do: "Parsing config"
+  defp event_name([:bc_gitops, :parse, :stop]), do: "Parse complete"
+  defp event_name([:bc_gitops, :health, :check]), do: "Health check"
+
   defp event_name(event), do: inspect(event)
 
   # Extract version from result's app_state tuple
@@ -944,6 +1019,7 @@ defmodule DemoWebWeb.DashboardLive do
   defp app_status_color(:starting), do: "text-yellow-400"
   defp app_status_color(_), do: "text-gray-400"
 
+  # Text colors
   defp event_text_color([:bc_gitops, :reconcile, :start]), do: "text-blue-400"
   defp event_text_color([:bc_gitops, :reconcile, :stop]), do: "text-green-400"
   defp event_text_color([:bc_gitops, :reconcile, :error]), do: "text-red-400"
@@ -951,17 +1027,34 @@ defmodule DemoWebWeb.DashboardLive do
   defp event_text_color([:bc_gitops, :deploy, :stop]), do: "text-purple-300"
   defp event_text_color([:bc_gitops, :upgrade, _]), do: "text-yellow-400"
   defp event_text_color([:bc_gitops, :remove, _]), do: "text-orange-400"
+  defp event_text_color([:bc_gitops, :git, :clone_start]), do: "text-cyan-400"
+  defp event_text_color([:bc_gitops, :git, :clone_stop]), do: "text-cyan-300"
+  defp event_text_color([:bc_gitops, :git, _]), do: "text-gray-400"
+  defp event_text_color([:bc_gitops, :deps, _]), do: "text-indigo-400"
+  defp event_text_color([:bc_gitops, :build, :start]), do: "text-amber-400"
+  defp event_text_color([:bc_gitops, :build, :stop]), do: "text-amber-300"
+  defp event_text_color([:bc_gitops, :code, :load]), do: "text-emerald-400"
   defp event_text_color(_), do: "text-gray-400"
 
+  # Border colors
   defp event_border_color([:bc_gitops, :reconcile, :start]), do: "border-blue-500"
   defp event_border_color([:bc_gitops, :reconcile, :stop]), do: "border-green-500"
   defp event_border_color([:bc_gitops, :reconcile, :error]), do: "border-red-500"
   defp event_border_color([:bc_gitops, :deploy, _]), do: "border-purple-500"
   defp event_border_color([:bc_gitops, :upgrade, _]), do: "border-yellow-500"
   defp event_border_color([:bc_gitops, :remove, _]), do: "border-orange-500"
+  defp event_border_color([:bc_gitops, :git, :clone_start]), do: "border-cyan-500"
+  defp event_border_color([:bc_gitops, :git, :clone_stop]), do: "border-cyan-500"
+  defp event_border_color([:bc_gitops, :deps, _]), do: "border-indigo-500"
+  defp event_border_color([:bc_gitops, :build, _]), do: "border-amber-500"
+  defp event_border_color([:bc_gitops, :code, :load]), do: "border-emerald-500"
   defp event_border_color(_), do: "border-gray-600"
 
+  # Background colors for important events
   defp event_bg_color([:bc_gitops, :reconcile, :error]), do: "bg-red-900/20"
   defp event_bg_color([:bc_gitops, :deploy, :stop]), do: "bg-purple-900/10"
+  defp event_bg_color([:bc_gitops, :git, :clone_stop]), do: "bg-cyan-900/10"
+  defp event_bg_color([:bc_gitops, :build, :stop]), do: "bg-amber-900/10"
+  defp event_bg_color([:bc_gitops, :code, :load]), do: "bg-emerald-900/10"
   defp event_bg_color(_), do: ""
 end

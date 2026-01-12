@@ -18,6 +18,8 @@ defmodule DemoWebWeb.Router do
     pipe_through :browser
 
     live "/", DashboardLive, :index
+    live "/terminal", TerminalLive, :index
+    live "/terminal/:app", TerminalLive, :app
   end
 
   # Other scopes may use custom stacks.

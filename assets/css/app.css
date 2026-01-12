@@ -103,3 +103,24 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+/* xterm.js terminal styles */
+@import "@xterm/xterm/css/xterm.css";
+
+/* Terminal container styles */
+.terminal-container {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  padding: 8px;
+  background: #1a1b26;
+  border-radius: 8px;
+}
+
+.terminal-container .xterm {
+  padding: 4px;
+}
+
+.terminal-container .xterm-screen {
+  border-radius: 4px;
+}

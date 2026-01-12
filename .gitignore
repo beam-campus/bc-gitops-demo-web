@@ -9,3 +9,9 @@ erl_crash.dump
 *.beam
 /config/*.secret.exs
 .elixir_ls/
+
+# npm dependencies
+/assets/node_modules/
+
+# Generated static assets (built by mix assets.build)
+/priv/static/assets/

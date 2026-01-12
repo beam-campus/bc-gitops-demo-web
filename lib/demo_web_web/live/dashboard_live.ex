@@ -446,6 +446,17 @@ defmodule DemoWebWeb.DashboardLive do
                 </svg>
               </a>
             <% end %>
+            <%= if has_tui?(@name) do %>
+              <.link
+                navigate={~p"/terminal/#{@name}"}
+                class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-sm rounded transition-colors inline-flex items-center gap-1"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                Terminal
+              </.link>
+            <% end %>
           </div>
         </div>
       <% end %>
@@ -976,6 +987,11 @@ defmodule DemoWebWeb.DashboardLive do
   end
 
   defp has_http_endpoint?(_), do: false
+
+  # Check if app has a TUI component (currently only demo_tui)
+  defp has_tui?(:demo_tui), do: true
+  defp has_tui?("demo_tui"), do: true
+  defp has_tui?(_), do: false
 
   defp get_http_url(app) when is_map(app) do
     env = app[:env] || %{}

@@ -21,7 +21,7 @@ defmodule DemoWeb.MixProject do
   def application do
     [
       mod: {DemoWeb.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :exec, :inets]
     ]
   end
 
@@ -41,7 +41,8 @@ defmodule DemoWeb.MixProject do
   defp deps do
     [
       # bc_gitops - the GitOps library this app hosts
-      {:bc_gitops, "~> 0.2.1"},
+      # Using path dep for development; switch to hex for release
+      {:bc_gitops, path: "../bc-gitops"},
 
       # Phoenix
       {:phoenix, "~> 1.8.3"},
@@ -62,7 +63,10 @@ defmodule DemoWeb.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"}
+      {:bandit, "~> 1.5"},
+
+      # PTY support for embedded terminal
+      {:erlexec, "~> 2.2"}
     ]
   end
 

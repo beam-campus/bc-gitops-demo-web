@@ -19,19 +19,53 @@ defmodule DemoWebWeb.DashboardLive do
       |> assign(:syncing, false)
       |> assign(:expanded_apps, MapSet.new())
       |> assign(:selected_app, nil)
+      |> assign(:app_data, %{})
 
     {:ok, socket}
   end
 
   @impl true
   def handle_params(%{"app" => app_name}, _uri, socket) do
-    {:noreply, assign(socket, :selected_app, String.to_existing_atom(app_name))}
+    app_atom = String.to_existing_atom(app_name)
+    app = socket.assigns.apps[app_atom]
+
+    socket =
+      socket
+      |> assign(:selected_app, app_atom)
+      |> maybe_fetch_app_data(app_atom, app)
+
+    {:noreply, socket}
   rescue
     ArgumentError -> {:noreply, assign(socket, :selected_app, nil)}
   end
 
   def handle_params(_params, _uri, socket) do
     {:noreply, assign(socket, :selected_app, nil)}
+  end
+
+  defp maybe_fetch_app_data(socket, app_name, app) when is_map(app) do
+    case get_http_url(app) do
+      nil -> socket
+      base_url ->
+        data = fetch_app_api_data(base_url)
+        assign(socket, :app_data, Map.put(socket.assigns.app_data, app_name, data))
+    end
+  end
+
+  defp maybe_fetch_app_data(socket, _app_name, _app), do: socket
+
+  defp fetch_app_api_data(base_url) do
+    case :httpc.request(:get, {~c"#{base_url}/health", []}, [{:timeout, 2000}], []) do
+      {:ok, {{_, 200, _}, _, body}} ->
+        case Jason.decode(to_string(body)) do
+          {:ok, data} -> data
+          _ -> %{"error" => "Invalid JSON"}
+        end
+      {:error, reason} ->
+        %{"error" => inspect(reason)}
+      _ ->
+        %{"error" => "Request failed"}
+    end
   end
 
   @impl true
@@ -102,6 +136,45 @@ defmodule DemoWebWeb.DashboardLive do
 
   def handle_event("close_app", _params, socket) do
     {:noreply, push_patch(socket, to: ~p"/")}
+  end
+
+  def handle_event("app_action", %{"app" => app_name, "action" => action}, socket) do
+    app_atom = String.to_existing_atom(app_name)
+    app = socket.assigns.apps[app_atom]
+
+    case {action, get_http_url(app)} do
+      {_, nil} ->
+        {:noreply, socket}
+
+      {"increment", base_url} ->
+        post_app_action(base_url, "/increment")
+        {:noreply, refresh_app_data(socket, app_atom, app)}
+
+      {"reset", base_url} ->
+        post_app_action(base_url, "/reset")
+        {:noreply, refresh_app_data(socket, app_atom, app)}
+
+      {"refresh", _base_url} ->
+        {:noreply, refresh_app_data(socket, app_atom, app)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  rescue
+    ArgumentError -> {:noreply, socket}
+  end
+
+  defp post_app_action(base_url, path) do
+    :httpc.request(:post, {~c"#{base_url}#{path}", [], ~c"application/json", ""}, [{:timeout, 2000}], [])
+  end
+
+  defp refresh_app_data(socket, app_name, app) do
+    case get_http_url(app) do
+      nil -> socket
+      base_url ->
+        data = fetch_app_api_data(base_url)
+        assign(socket, :app_data, Map.put(socket.assigns.app_data, app_name, data))
+    end
   end
 
   defp fetch_status do
@@ -183,8 +256,8 @@ defmodule DemoWebWeb.DashboardLive do
         </div>
 
         <%= if @selected_app do %>
-          <!-- App Detail View with Embed -->
-          <.app_detail_panel app={@apps[@selected_app]} name={@selected_app} />
+          <!-- App Detail View with Native Integration -->
+          <.app_detail_panel app={@apps[@selected_app]} name={@selected_app} app_data={@app_data[@selected_app]} />
         <% else %>
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Managed Apps -->
@@ -358,6 +431,7 @@ defmodule DemoWebWeb.DashboardLive do
 
   attr :app, :map, required: true
   attr :name, :atom, required: true
+  attr :app_data, :map, default: nil
 
   defp app_detail_panel(assigns) do
     ~H"""
@@ -378,23 +452,8 @@ defmodule DemoWebWeb.DashboardLive do
             <p class="text-sm text-gray-400">v<%= @app[:version] || "?" %></p>
           </div>
         </div>
-        <span class={
-          "px-3 py-1 text-sm font-medium rounded-full " <>
-          case @app[:status] do
-            :running -> "bg-green-900 text-green-300"
-            :stopped -> "bg-gray-600 text-gray-300"
-            :failed -> "bg-red-900 text-red-300"
-            _ -> "bg-gray-600 text-gray-300"
-          end
-        }>
-          <%= @app[:status] || :unknown %>
-        </span>
-      </div>
-
-      <!-- Embedded App UI -->
-      <%= if has_http_endpoint?(@app) do %>
-        <div class="p-4">
-          <div class="flex gap-2 mb-4">
+        <div class="flex items-center gap-3">
+          <%= if has_http_endpoint?(@app) do %>
             <a
               href={get_http_url(@app)}
               target="_blank"
@@ -405,13 +464,24 @@ defmodule DemoWebWeb.DashboardLive do
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
               </svg>
             </a>
-          </div>
-          <iframe
-            src={get_http_url(@app)}
-            class="w-full h-[500px] bg-white rounded-lg border border-gray-600"
-            title={"#{@name} UI"}
-          />
+          <% end %>
+          <span class={
+            "px-3 py-1 text-sm font-medium rounded-full " <>
+            case @app[:status] do
+              :running -> "bg-green-900 text-green-300"
+              :stopped -> "bg-gray-600 text-gray-300"
+              :failed -> "bg-red-900 text-red-300"
+              _ -> "bg-gray-600 text-gray-300"
+            end
+          }>
+            <%= @app[:status] || :unknown %>
+          </span>
         </div>
+      </div>
+
+      <!-- Native App UI Integration -->
+      <%= if has_http_endpoint?(@app) do %>
+        <.app_native_ui name={@name} app={@app} data={@app_data} />
       <% else %>
         <div class="p-6 text-center text-gray-500">
           <svg class="mx-auto h-12 w-12 text-gray-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -437,6 +507,150 @@ defmodule DemoWebWeb.DashboardLive do
           <p class="font-mono text-xs text-gray-400 truncate"><%= @app[:path] %></p>
         </div>
       </div>
+    </div>
+    """
+  end
+
+  attr :name, :atom, required: true
+  attr :app, :map, required: true
+  attr :data, :map, default: nil
+
+  defp app_native_ui(assigns) do
+    ~H"""
+    <div class="p-6">
+      <%= cond do %>
+        <% @data == nil -> %>
+          <!-- Loading state -->
+          <div class="flex justify-center py-8">
+            <svg class="animate-spin h-8 w-8 text-blue-400" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+            </svg>
+          </div>
+
+        <% @data["error"] -> %>
+          <!-- Error state -->
+          <div class="bg-red-900/20 border border-red-700 rounded-lg p-4 text-center">
+            <svg class="mx-auto h-8 w-8 text-red-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <p class="text-red-400 font-medium">Connection Error</p>
+            <p class="text-red-300 text-sm mt-1"><%= @data["error"] %></p>
+            <button
+              phx-click="app_action"
+              phx-value-app={@name}
+              phx-value-action="refresh"
+              class="mt-3 px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+
+        <% @name == :demo_counter -> %>
+          <!-- Demo Counter specific UI -->
+          <.counter_ui name={@name} data={@data} />
+
+        <% true -> %>
+          <!-- Generic app data display -->
+          <.generic_app_ui name={@name} data={@data} />
+      <% end %>
+    </div>
+    """
+  end
+
+  attr :name, :atom, required: true
+  attr :data, :map, required: true
+
+  defp counter_ui(assigns) do
+    ~H"""
+    <div class="flex flex-col items-center py-8">
+      <!-- Counter Display -->
+      <div class="bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl p-8 shadow-xl border border-gray-600 mb-8">
+        <p class="text-gray-400 text-sm uppercase tracking-wider text-center mb-2">Current Count</p>
+        <p class="text-7xl font-bold text-white text-center tabular-nums">
+          <%= @data["count"] || 0 %>
+        </p>
+      </div>
+
+      <!-- Status -->
+      <div class="flex items-center gap-2 mb-6">
+        <span class={"w-2 h-2 rounded-full " <> if(@data["status"] == "healthy", do: "bg-green-400 animate-pulse", else: "bg-red-400")} />
+        <span class="text-sm text-gray-400">
+          <%= if @data["status"] == "healthy", do: "Healthy", else: "Unhealthy" %>
+        </span>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex gap-4">
+        <button
+          phx-click="app_action"
+          phx-value-app={@name}
+          phx-value-action="increment"
+          class="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2 shadow-lg"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+          </svg>
+          Increment
+        </button>
+
+        <button
+          phx-click="app_action"
+          phx-value-app={@name}
+          phx-value-action="reset"
+          class="px-6 py-3 bg-gray-600 hover:bg-gray-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Reset
+        </button>
+
+        <button
+          phx-click="app_action"
+          phx-value-app={@name}
+          phx-value-action="refresh"
+          class="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+          title="Refresh"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- API Info -->
+      <div class="mt-8 text-center text-sm text-gray-500">
+        <p>This UI is integrated via HTTP API calls to the managed application</p>
+        <p class="font-mono text-xs mt-1 text-gray-600">
+          GET /count &bull; POST /increment &bull; POST /reset &bull; GET /health
+        </p>
+      </div>
+    </div>
+    """
+  end
+
+  attr :name, :atom, required: true
+  attr :data, :map, required: true
+
+  defp generic_app_ui(assigns) do
+    ~H"""
+    <div>
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-medium text-white">API Response</h3>
+        <button
+          phx-click="app_action"
+          phx-value-app={@name}
+          phx-value-action="refresh"
+          class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors flex items-center gap-1"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <pre class="bg-gray-900 rounded-lg p-4 overflow-x-auto text-sm font-mono text-gray-300"><%= Jason.encode!(@data, pretty: true) %></pre>
     </div>
     """
   end

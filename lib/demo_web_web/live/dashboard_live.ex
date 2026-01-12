@@ -20,6 +20,7 @@ defmodule DemoWebWeb.DashboardLive do
       |> assign(:expanded_apps, MapSet.new())
       |> assign(:selected_app, nil)
       |> assign(:app_data, %{})
+      |> assign(:app_info, %{})
 
     {:ok, socket}
   end
@@ -157,11 +158,29 @@ defmodule DemoWebWeb.DashboardLive do
       {"refresh", _base_url} ->
         {:noreply, refresh_app_data(socket, app_atom, app)}
 
+      {"info", base_url} ->
+        info = fetch_app_info(base_url)
+        {:noreply, assign(socket, :app_info, Map.put(socket.assigns.app_info, app_atom, info))}
+
       _ ->
         {:noreply, socket}
     end
   rescue
     ArgumentError -> {:noreply, socket}
+  end
+
+  defp fetch_app_info(base_url) do
+    case :httpc.request(:get, {~c"#{base_url}/info", []}, [{:timeout, 2000}], []) do
+      {:ok, {{_, 200, _}, _, body}} ->
+        case Jason.decode(to_string(body)) do
+          {:ok, data} -> data
+          _ -> %{"error" => "Invalid JSON"}
+        end
+      {:error, reason} ->
+        %{"error" => inspect(reason)}
+      _ ->
+        %{"error" => "Request failed"}
+    end
   end
 
   defp post_app_action(base_url, path) do
@@ -262,7 +281,7 @@ defmodule DemoWebWeb.DashboardLive do
 
         <%= if @selected_app do %>
           <!-- App Detail View with Native Integration -->
-          <.app_detail_panel app={@apps[@selected_app]} name={@selected_app} app_data={@app_data[@selected_app]} />
+          <.app_detail_panel app={@apps[@selected_app]} name={@selected_app} app_data={@app_data[@selected_app]} app_info={@app_info[@selected_app]} />
         <% else %>
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Managed Apps -->
@@ -437,6 +456,7 @@ defmodule DemoWebWeb.DashboardLive do
   attr :app, :map, required: true
   attr :name, :atom, required: true
   attr :app_data, :map, default: nil
+  attr :app_info, :map, default: nil
 
   defp app_detail_panel(assigns) do
     ~H"""
@@ -486,7 +506,7 @@ defmodule DemoWebWeb.DashboardLive do
 
       <!-- Native App UI Integration -->
       <%= if has_http_endpoint?(@app) do %>
-        <.app_native_ui name={@name} app={@app} data={@app_data} />
+        <.app_native_ui name={@name} app={@app} data={@app_data} info={@app_info} />
       <% else %>
         <div class="p-6 text-center text-gray-500">
           <svg class="mx-auto h-12 w-12 text-gray-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -519,6 +539,7 @@ defmodule DemoWebWeb.DashboardLive do
   attr :name, :atom, required: true
   attr :app, :map, required: true
   attr :data, :map, default: nil
+  attr :info, :map, default: nil
 
   defp app_native_ui(assigns) do
     # Check if app has LiveComponents to render
@@ -561,7 +582,7 @@ defmodule DemoWebWeb.DashboardLive do
 
         <% @name == :demo_counter -> %>
           <!-- Demo Counter specific UI -->
-          <.counter_ui name={@name} data={@data} />
+          <.counter_ui name={@name} data={@data} info={@info} />
 
         <% true -> %>
           <!-- Generic app data display -->
@@ -639,6 +660,7 @@ defmodule DemoWebWeb.DashboardLive do
 
   attr :name, :atom, required: true
   attr :data, :map, required: true
+  attr :info, :map, default: nil
 
   defp counter_ui(assigns) do
     ~H"""
@@ -688,6 +710,18 @@ defmodule DemoWebWeb.DashboardLive do
         <button
           phx-click="app_action"
           phx-value-app={@name}
+          phx-value-action="info"
+          class="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Info
+        </button>
+
+        <button
+          phx-click="app_action"
+          phx-value-app={@name}
           phx-value-action="refresh"
           class="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
           title="Refresh"
@@ -698,11 +732,48 @@ defmodule DemoWebWeb.DashboardLive do
         </button>
       </div>
 
+      <!-- App Info Panel (when fetched) -->
+      <%= if @info do %>
+        <div class="mt-8 w-full max-w-md">
+          <div class="bg-gray-900 rounded-lg border border-purple-500/30 overflow-hidden">
+            <div class="px-4 py-2 bg-purple-900/30 border-b border-purple-500/30 flex justify-between items-center">
+              <span class="text-sm font-medium text-purple-300">Application Info</span>
+              <span class="text-xs text-purple-400 font-mono">GET /info</span>
+            </div>
+            <div class="p-4">
+              <%= if @info["error"] do %>
+                <p class="text-red-400 text-sm"><%= @info["error"] %></p>
+              <% else %>
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">App:</span>
+                    <span class="text-white font-medium"><%= @info["app"] %></span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Version:</span>
+                    <span class="text-purple-400 font-mono font-bold"><%= @info["version"] %></span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Author:</span>
+                    <span class="text-gray-300"><%= @info["author"] %></span>
+                  </div>
+                  <%= if @info["description"] do %>
+                    <div class="pt-2 border-t border-gray-700">
+                      <p class="text-gray-400 text-xs"><%= @info["description"] %></p>
+                    </div>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
       <!-- API Info -->
       <div class="mt-8 text-center text-sm text-gray-500">
         <p>This UI is integrated via HTTP API calls to the managed application</p>
         <p class="font-mono text-xs mt-1 text-gray-600">
-          GET /count &bull; POST /increment &bull; POST /reset &bull; GET /health
+          GET /count &bull; POST /increment &bull; POST /reset &bull; GET /health &bull; GET /info
         </p>
       </div>
     </div>

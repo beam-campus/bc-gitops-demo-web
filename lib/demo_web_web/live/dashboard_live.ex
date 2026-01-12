@@ -756,12 +756,12 @@ defmodule DemoWebWeb.DashboardLive do
 
       <!-- Git info (for git:pull events showing config repo) -->
       <%= if @event.event == [:bc_gitops, :git, :pull] do %>
-        <div class="flex items-center gap-2 mt-1 text-xs">
+        <p class="text-xs mt-1">
           <span class="text-gray-500">Config:</span>
-          <span class="text-cyan-400 font-mono"><%= @event.metadata[:repo] || "_bc_gitops" %></span>
-          <span class="text-gray-600">→</span>
+          <span class="text-cyan-400 font-mono ml-1"><%= @event.metadata[:repo] || "_bc_gitops" %></span>
+          <span class="text-gray-500 mx-1">@</span>
           <span class="text-yellow-400"><%= @event.metadata[:branch] || "master" %></span>
-        </div>
+        </p>
       <% end %>
 
       <!-- Duration for stop events -->

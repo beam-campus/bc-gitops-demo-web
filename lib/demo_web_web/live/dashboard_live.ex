@@ -180,6 +180,7 @@ defmodule DemoWebWeb.DashboardLive do
   defp fetch_status do
     case :bc_gitops.status() do
       {:ok, status} -> status
+      {:error, :busy} -> %{status: :busy, last_commit: nil, app_count: 0, healthy_count: 0}
       _ -> %{status: :unknown, last_commit: nil, app_count: 0, healthy_count: 0}
     end
   end
@@ -945,11 +946,13 @@ defmodule DemoWebWeb.DashboardLive do
 
   defp status_text(:synced), do: "Synced"
   defp status_text(:out_of_sync), do: "Out of Sync"
+  defp status_text(:busy), do: "Working..."
   defp status_text(:error), do: "Error"
   defp status_text(_), do: "Unknown"
 
   defp status_color(:synced), do: "green"
   defp status_color(:out_of_sync), do: "yellow"
+  defp status_color(:busy), do: "blue"
   defp status_color(:error), do: "red"
   defp status_color(_), do: "gray"
 

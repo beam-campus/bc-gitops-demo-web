@@ -516,9 +516,17 @@ defmodule DemoWebWeb.DashboardLive do
   attr :data, :map, default: nil
 
   defp app_native_ui(assigns) do
+    # Check if app has LiveComponents to render
+    liveview_components = get_liveview_components(assigns.app)
+    assigns = assign(assigns, :liveview_components, liveview_components)
+
     ~H"""
     <div class="p-6">
       <%= cond do %>
+        <% @liveview_components != [] -> %>
+          <!-- LiveComponent rendering -->
+          <.guest_components components={@liveview_components} app_name={@name} />
+
         <% @data == nil -> %>
           <!-- Loading state -->
           <div class="flex justify-center py-8">
@@ -553,6 +561,72 @@ defmodule DemoWebWeb.DashboardLive do
         <% true -> %>
           <!-- Generic app data display -->
           <.generic_app_ui name={@name} data={@data} />
+      <% end %>
+    </div>
+    """
+  end
+
+  # Extract liveview_components from app env
+  defp get_liveview_components(app) when is_map(app) do
+    env = app[:env] || %{}
+    components = env[:liveview_components] || env["liveview_components"] || []
+
+    # Normalize component format (handle both atom and string keys from Erlang)
+    Enum.map(components, fn comp ->
+      %{
+        id: comp[:id] || comp["id"],
+        module: normalize_module(comp[:module] || comp["module"]),
+        title: to_string(comp[:title] || comp["title"] || "Component"),
+        description: to_string(comp[:description] || comp["description"] || "")
+      }
+    end)
+  end
+
+  defp get_liveview_components(_), do: []
+
+  # Convert Erlang atom or charlist to Elixir module
+  defp normalize_module(mod) when is_atom(mod), do: mod
+  defp normalize_module(mod) when is_list(mod), do: List.to_atom(mod)
+  defp normalize_module(mod) when is_binary(mod), do: String.to_existing_atom(mod)
+  defp normalize_module(_), do: nil
+
+  attr :components, :list, required: true
+  attr :app_name, :atom, required: true
+
+  defp guest_components(assigns) do
+    ~H"""
+    <div class="space-y-6">
+      <%= for comp <- @components do %>
+        <div>
+          <!-- Component Header -->
+          <div class="flex items-center gap-2 mb-3">
+            <div class="w-2 h-2 bg-purple-500 rounded-full"></div>
+            <h3 class="text-lg font-medium text-white"><%= comp.title %></h3>
+            <span class="text-xs text-gray-500 font-mono">LiveComponent</span>
+          </div>
+
+          <%= if comp.description != "" do %>
+            <p class="text-sm text-gray-400 mb-4"><%= comp.description %></p>
+          <% end %>
+
+          <!-- Render the guest component -->
+          <%= if comp.module && Code.ensure_loaded?(comp.module) do %>
+            <.live_component
+              module={comp.module}
+              id={"guest-#{@app_name}-#{comp.id}"}
+              host_app="bc_gitops_dashboard"
+              theme="dark"
+            />
+          <% else %>
+            <div class="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4 text-center">
+              <p class="text-yellow-400 font-medium">Component Not Loaded</p>
+              <p class="text-yellow-300 text-sm mt-1 font-mono"><%= inspect(comp.module) %></p>
+              <p class="text-yellow-300/70 text-xs mt-2">
+                The guest application may not be started yet, or the module doesn't exist.
+              </p>
+            </div>
+          <% end %>
+        </div>
       <% end %>
     </div>
     """

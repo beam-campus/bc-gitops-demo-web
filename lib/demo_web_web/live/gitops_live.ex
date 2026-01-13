@@ -212,7 +212,8 @@ defmodule DemoWebWeb.GitOpsLive do
     %{
       type: get_key(source, [:type]),
       url: get_key(source, [:url]),
-      ref: get_key(source, [:ref])
+      ref: get_key(source, [:ref]),
+      package: get_key(source, [:package])
     }
   end
 

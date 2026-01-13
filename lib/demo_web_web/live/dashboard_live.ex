@@ -27,17 +27,22 @@ defmodule DemoWebWeb.DashboardLive do
 
   @impl true
   def handle_params(%{"app" => app_name}, _uri, socket) do
-    app_atom = String.to_existing_atom(app_name)
-    app = socket.assigns.apps[app_atom]
+    # Find the app by matching atom name as string
+    {app_atom, app} =
+      Enum.find(socket.assigns.apps, {nil, nil}, fn {name, _app} ->
+        Atom.to_string(name) == app_name
+      end)
 
-    socket =
-      socket
-      |> assign(:selected_app, app_atom)
-      |> maybe_fetch_app_data(app_atom, app)
+    if app_atom do
+      socket =
+        socket
+        |> assign(:selected_app, app_atom)
+        |> maybe_fetch_app_data(app_atom, app)
 
-    {:noreply, socket}
-  rescue
-    ArgumentError -> {:noreply, assign(socket, :selected_app, nil)}
+      {:noreply, socket}
+    else
+      {:noreply, assign(socket, :selected_app, nil)}
+    end
   end
 
   def handle_params(_params, _uri, socket) do

@@ -530,7 +530,7 @@ defmodule DemoWebWeb.GitOpsLive do
         <p class="text-red-400 text-sm"><%= @spec[:error] %></p>
       <% else %>
         <%= if @spec[:source] do %>
-          <.source_info source={@spec.source} />
+          <.source_info source={@spec.source} app_name={@name} />
         <% end %>
 
         <%= if @spec[:depends_on] != [] do %>
@@ -631,9 +631,10 @@ defmodule DemoWebWeb.GitOpsLive do
   end
 
   attr :source, :map, required: true
+  attr :app_name, :atom, default: nil
 
   defp source_info(assigns) do
-    parsed = parse_source(assigns.source)
+    parsed = parse_source(assigns.source, assigns.app_name)
     assigns = assign(assigns, :parsed, parsed)
 
     ~H"""
@@ -687,18 +688,20 @@ defmodule DemoWebWeb.GitOpsLive do
 
   # Helpers
 
-  defp parse_source(source) when is_map(source) do
+  defp parse_source(source, app_name \\ nil)
+
+  defp parse_source(source, app_name) when is_map(source) do
     type = source[:type] || :unknown
     url = to_string(source[:url] || "")
 
     case type do
       :git -> parse_git_url(url)
-      :hex -> parse_hex_source(source)
+      :hex -> parse_hex_source(source, app_name)
       _ -> %{type: type, host: "unknown", path: url}
     end
   end
 
-  defp parse_source(_), do: %{type: :unknown, host: "unknown", path: ""}
+  defp parse_source(_, _), do: %{type: :unknown, host: "unknown", path: ""}
 
   defp parse_git_url(url) do
     # Handle various git URL formats
@@ -742,8 +745,8 @@ defmodule DemoWebWeb.GitOpsLive do
     |> then(&("/" <> &1))
   end
 
-  defp parse_hex_source(source) do
-    package = source[:package] || source[:name] || "unknown"
+  defp parse_hex_source(source, app_name) do
+    package = source[:package] || app_name || "unknown"
     %{type: :hex, host: "hex.pm", path: "/packages/#{package}"}
   end
 

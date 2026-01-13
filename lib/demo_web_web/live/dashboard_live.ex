@@ -222,10 +222,29 @@ defmodule DemoWebWeb.DashboardLive do
     end
   end
 
+  # New 11-element app_state record with description and icon
+  defp record_to_map({:app_state, name, version, description, icon, status, path, pid, started_at, health, env}) do
+    %{
+      name: name,
+      version: version,
+      description: description,
+      icon: icon,
+      status: status,
+      path: path,
+      pid: pid,
+      started_at: started_at,
+      health: health,
+      env: env
+    }
+  end
+
+  # Legacy 9-element app_state record (fallback)
   defp record_to_map({:app_state, name, version, status, path, pid, started_at, health, env}) do
     %{
       name: name,
       version: version,
+      description: nil,
+      icon: nil,
       status: status,
       path: path,
       pid: pid,

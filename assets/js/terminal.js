@@ -97,6 +97,7 @@ export const TerminalHook = {
     })
 
     this.channel.on("output", ({ data }) => {
+      console.log("[Terminal] Received output:", data ? data.length : 0, "chars")
       this.term.write(data)
     })
 

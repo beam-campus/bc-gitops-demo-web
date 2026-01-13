@@ -56,12 +56,18 @@ defmodule DemoWebWeb.TerminalChannel do
 
   @impl true
   def handle_info({:stdout, _os_pid, data}, socket) do
-    push(socket, "output", %{data: data})
+    # erlexec returns data as charlist, convert to binary string for JSON
+    binary_data = if is_list(data), do: IO.iodata_to_binary(data), else: data
+    Logger.debug("[Terminal] stdout: #{inspect(binary_data, limit: 50)}")
+    push(socket, "output", %{data: binary_data})
     {:noreply, socket}
   end
 
   def handle_info({:stderr, _os_pid, data}, socket) do
-    push(socket, "output", %{data: data})
+    # erlexec returns data as charlist, convert to binary string for JSON
+    binary_data = if is_list(data), do: IO.iodata_to_binary(data), else: data
+    Logger.debug("[Terminal] stderr received: #{byte_size(binary_data)} bytes")
+    push(socket, "output", %{data: binary_data})
     {:noreply, socket}
   end
 
@@ -69,6 +75,12 @@ defmodule DemoWebWeb.TerminalChannel do
     Logger.info("[Terminal] PTY process exited: #{inspect(reason)}")
     push(socket, "exit", %{reason: inspect(reason)})
     {:stop, :normal, socket}
+  end
+
+  # Catch-all to see what messages we're getting
+  def handle_info(msg, socket) do
+    Logger.warning("[Terminal] Unexpected message: #{inspect(msg)}")
+    {:noreply, socket}
   end
 
   @impl true
@@ -101,10 +113,16 @@ defmodule DemoWebWeb.TerminalChannel do
           :stdout,
           :stderr,
           :monitor,
-          {:env, env ++ [{"COLUMNS", to_string(cols)}, {"LINES", to_string(rows)}]}
+          {:env, env ++ [
+            {"COLUMNS", to_string(cols)},
+            {"LINES", to_string(rows)},
+            {"TERM", "xterm-256color"}
+          ]}
         ]
 
-        script_cmd = ["/usr/bin/script", "-q", "-c", full_cmd, "/dev/null"]
+        # Wrap command with stty to set terminal size
+        wrapped_cmd = "stty cols #{cols} rows #{rows} 2>/dev/null; #{full_cmd}"
+        script_cmd = ["/usr/bin/script", "-q", "-c", wrapped_cmd, "/dev/null"]
         Logger.debug("[Terminal] Running via script: #{inspect(script_cmd)}")
 
         case :exec.run(script_cmd, opts) do
@@ -135,6 +153,7 @@ defmodule DemoWebWeb.TerminalChannel do
           {"COUNTER_URL", "http://localhost:8082"}
         ]
 
+        # Run binary directly - script wrapper provides PTY
         {:ok, binary_path, [], env}
 
       :error ->

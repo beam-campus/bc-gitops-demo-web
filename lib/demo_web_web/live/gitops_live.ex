@@ -510,14 +510,7 @@ defmodule DemoWebWeb.GitOpsLive do
         <p class="text-red-400 text-sm"><%= @spec[:error] %></p>
       <% else %>
         <%= if @spec[:source] do %>
-          <div class="mt-2 text-xs">
-            <span class="text-gray-500">Source:</span>
-            <span class={"ml-1 " <> source_color(@spec.source[:type])}><%= @spec.source[:type] %></span>
-            <%= if @spec.source[:ref] do %>
-              <span class="text-gray-500 mx-1">@</span>
-              <span class="text-yellow-400"><%= truncate(@spec.source[:ref], 10) %></span>
-            <% end %>
-          </div>
+          <.source_info source={@spec.source} />
         <% end %>
 
         <%= if @spec[:depends_on] != [] do %>
@@ -617,7 +610,137 @@ defmodule DemoWebWeb.GitOpsLive do
     """
   end
 
+  attr :source, :map, required: true
+
+  defp source_info(assigns) do
+    parsed = parse_source(assigns.source)
+    assigns = assign(assigns, :parsed, parsed)
+
+    ~H"""
+    <div class="mt-3 bg-gray-800 rounded-lg p-3 border border-gray-600">
+      <!-- Type Badge -->
+      <div class="flex items-center gap-2 mb-2">
+        <span class={source_type_badge(@parsed.type)}>
+          <.source_type_icon type={@parsed.type} />
+          <%= @parsed.type %>
+        </span>
+        <%= if @source[:ref] do %>
+          <span class="px-2 py-0.5 text-xs rounded bg-yellow-900/50 text-yellow-300 font-mono">
+            @<%= truncate(to_string(@source[:ref]), 12) %>
+          </span>
+        <% end %>
+      </div>
+
+      <!-- URL breakdown -->
+      <div class="space-y-1 text-xs">
+        <div class="flex items-center gap-2">
+          <span class="text-gray-500 w-16">Host:</span>
+          <span class="text-gray-300"><%= @parsed.host %></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-gray-500 w-16">Package:</span>
+          <span class={"font-mono " <> source_path_color(@parsed.type)}><%= @parsed.path %></span>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  attr :type, :atom, required: true
+
+  defp source_type_icon(%{type: :git} = assigns) do
+    ~H"""
+    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M21.62 11.108l-8.731-8.729a1.292 1.292 0 00-1.823 0L9.257 4.19l2.299 2.3a1.532 1.532 0 011.939 1.95l2.214 2.215a1.53 1.53 0 011.583 2.531 1.534 1.534 0 01-2.119-.024 1.536 1.536 0 01-.336-1.683l-2.064-2.065v5.427a1.535 1.535 0 01.406 2.533 1.534 1.534 0 11-1.538-2.533V9.4a1.532 1.532 0 01-.832-2.012L8.5 5.076l-6.123 6.123a1.29 1.29 0 000 1.823l8.731 8.729a1.29 1.29 0 001.823 0l8.689-8.82a1.29 1.29 0 000-1.823z"/>
+    </svg>
+    """
+  end
+
+  defp source_type_icon(%{type: :hex} = assigns) do
+    ~H"""
+    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M12 2L3 7v10l9 5 9-5V7l-9-5zm0 2.18l6.56 3.64L12 11.46 5.44 7.82 12 4.18zM5 9.64l6 3.33v6.36l-6-3.33V9.64zm14 6.36l-6 3.33v-6.36l6-3.33v6.36z"/>
+    </svg>
+    """
+  end
+
+  defp source_type_icon(assigns) do
+    ~H"""
+    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    """
+  end
+
   # Helpers
+
+  defp parse_source(source) when is_map(source) do
+    type = source[:type] || :unknown
+    url = to_string(source[:url] || "")
+
+    case type do
+      :git -> parse_git_url(url)
+      :hex -> parse_hex_source(source)
+      _ -> %{type: type, host: "unknown", path: url}
+    end
+  end
+
+  defp parse_source(_), do: %{type: :unknown, host: "unknown", path: ""}
+
+  defp parse_git_url(url) do
+    # Handle various git URL formats
+    cond do
+      String.contains?(url, "github.com") ->
+        path = extract_git_path(url, "github.com")
+        %{type: :git, host: "github.com", path: path}
+
+      String.contains?(url, "gitlab.com") ->
+        path = extract_git_path(url, "gitlab.com")
+        %{type: :git, host: "gitlab.com", path: path}
+
+      String.contains?(url, "bitbucket.org") ->
+        path = extract_git_path(url, "bitbucket.org")
+        %{type: :git, host: "bitbucket.org", path: path}
+
+      true ->
+        # Generic git URL
+        case URI.parse(url) do
+          %{host: host, path: path} when is_binary(host) ->
+            %{type: :git, host: host, path: clean_git_path(path)}
+          _ ->
+            %{type: :git, host: "git", path: url}
+        end
+    end
+  end
+
+  defp extract_git_path(url, host) do
+    url
+    |> String.split(host)
+    |> List.last()
+    |> clean_git_path()
+  end
+
+  defp clean_git_path(nil), do: ""
+  defp clean_git_path(path) do
+    path
+    |> String.trim_leading("/")
+    |> String.trim_leading(":")
+    |> String.trim_trailing(".git")
+    |> then(&("/" <> &1))
+  end
+
+  defp parse_hex_source(source) do
+    package = source[:package] || source[:name] || "unknown"
+    %{type: :hex, host: "hex.pm", path: "/packages/#{package}"}
+  end
+
+  defp source_type_badge(:git), do: "inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-orange-900/50 text-orange-300"
+  defp source_type_badge(:hex), do: "inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-purple-900/50 text-purple-300"
+  defp source_type_badge(_), do: "inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-gray-700 text-gray-300"
+
+  defp source_path_color(:git), do: "text-orange-400"
+  defp source_path_color(:hex), do: "text-purple-400"
+  defp source_path_color(_), do: "text-gray-400"
 
   defp get_sync_status(nil, _deployed), do: :no_spec
   defp get_sync_status(_spec, nil), do: :not_deployed

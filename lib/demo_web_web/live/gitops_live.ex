@@ -617,30 +617,23 @@ defmodule DemoWebWeb.GitOpsLive do
     assigns = assign(assigns, :parsed, parsed)
 
     ~H"""
-    <div class="mt-3 bg-gray-800 rounded-lg p-3 border border-gray-600">
-      <!-- Type Badge -->
-      <div class="flex items-center gap-2 mb-2">
+    <div class="mt-3 bg-gray-800 rounded-lg p-3 border border-gray-600 text-xs">
+      <!-- Type + Host + Ref on one row -->
+      <div class="flex items-center gap-2 flex-wrap">
         <span class={source_type_badge(@parsed.type)}>
           <.source_type_icon type={@parsed.type} />
           <%= @parsed.type %>
         </span>
+        <span class="text-gray-300"><%= @parsed.host %></span>
         <%= if @source[:ref] do %>
-          <span class="px-2 py-0.5 text-xs rounded bg-yellow-900/50 text-yellow-300 font-mono">
+          <span class="px-2 py-0.5 rounded bg-yellow-900/50 text-yellow-300 font-mono">
             @<%= truncate(to_string(@source[:ref]), 12) %>
           </span>
         <% end %>
       </div>
-
-      <!-- URL breakdown -->
-      <div class="space-y-1 text-xs">
-        <div class="flex items-center gap-2">
-          <span class="text-gray-500 w-16">Host:</span>
-          <span class="text-gray-300"><%= @parsed.host %></span>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-gray-500 w-16">Package:</span>
-          <span class={"font-mono " <> source_path_color(@parsed.type)}><%= @parsed.path %></span>
-        </div>
+      <!-- Package path -->
+      <div class={"mt-1.5 font-mono truncate " <> source_path_color(@parsed.type)} title={@parsed.path}>
+        <%= @parsed.path %>
       </div>
     </div>
     """

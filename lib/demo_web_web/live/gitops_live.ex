@@ -619,14 +619,14 @@ defmodule DemoWebWeb.GitOpsLive do
     ~H"""
     <div class="mt-3 bg-gray-800 rounded-lg p-3 border border-gray-600 text-xs">
       <!-- Type + Host + Ref on one row -->
-      <div class="flex items-center gap-2 flex-wrap">
+      <div class="flex items-center gap-2">
         <span class={source_type_badge(@parsed.type)}>
           <.source_type_icon type={@parsed.type} />
           <%= @parsed.type %>
         </span>
         <span class="text-gray-300"><%= @parsed.host %></span>
         <%= if @source[:ref] do %>
-          <span class="px-2 py-0.5 rounded bg-yellow-900/50 text-yellow-300 font-mono">
+          <span class="ml-auto px-2 py-0.5 rounded bg-yellow-900/50 text-yellow-300 font-mono">
             @<%= truncate(to_string(@source[:ref]), 12) %>
           </span>
         <% end %>

@@ -18,6 +18,7 @@ defmodule DemoWebWeb.Router do
     pipe_through :browser
 
     live "/", DashboardLive, :index
+    live "/gitops", GitOpsLive, :index
     live "/terminal", TerminalLive, :index
     live "/terminal/:app", TerminalLive, :app
   end

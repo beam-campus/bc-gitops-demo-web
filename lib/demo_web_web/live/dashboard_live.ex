@@ -244,6 +244,15 @@ defmodule DemoWebWeb.DashboardLive do
               <h1 class="text-3xl font-bold text-white">bc_gitops Dashboard</h1>
               <p class="text-gray-400 mt-1">GitOps for the BEAM</p>
             </div>
+            <.link
+              navigate={~p"/gitops"}
+              class="px-4 py-2 rounded-lg font-medium bg-gray-700 hover:bg-gray-600 text-white transition-colors flex items-center gap-2"
+            >
+              <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+              </svg>
+              GitOps
+            </.link>
             <button
               phx-click="sync"
               disabled={@syncing}

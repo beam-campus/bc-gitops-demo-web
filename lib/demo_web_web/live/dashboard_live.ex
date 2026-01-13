@@ -11,16 +11,22 @@ defmodule DemoWebWeb.DashboardLive do
       :timer.send_interval(5000, self(), :refresh_status)
     end
 
+    apps = fetch_apps()
+
     socket =
       socket
       |> assign(:status, fetch_status())
-      |> assign(:apps, fetch_apps())
+      |> assign(:apps, apps)
       |> assign(:events, [])
       |> assign(:syncing, false)
       |> assign(:expanded_apps, MapSet.new())
       |> assign(:selected_app, nil)
       |> assign(:app_data, %{})
       |> assign(:app_info, %{})
+      |> assign(:component_subscriptions, %{})
+
+    # Subscribe to component PubSub topics for real-time updates
+    socket = if connected?(socket), do: subscribe_to_components(socket, apps), else: socket
 
     {:ok, socket}
   end
@@ -80,6 +86,20 @@ defmodule DemoWebWeb.DashboardLive do
       socket
       |> assign(:status, fetch_status())
       |> assign(:apps, fetch_apps())
+
+    {:noreply, socket}
+  end
+
+  # Handle PubSub messages from guest app components (e.g., stats updates)
+  @impl true
+  def handle_info({:stats_update, stats}, socket) do
+    # Find all subscriptions that have stats as update_assign
+    socket.assigns.component_subscriptions
+    |> Enum.filter(fn {_key, sub} -> sub.update_assign == :stats end)
+    |> Enum.each(fn {_key, sub} ->
+      # Send update to the component with the stats
+      send_update(sub.module, id: "guest-#{sub.app_name}-#{sub.component_id}", stats: stats)
+    end)
 
     {:noreply, socket}
   end
@@ -220,6 +240,31 @@ defmodule DemoWebWeb.DashboardLive do
     catch
       :exit, {:timeout, _} -> %{}
     end
+  end
+
+  # Subscribe to PubSub topics for guest app LiveComponents
+  defp subscribe_to_components(socket, apps) do
+    subscriptions =
+      apps
+      |> Enum.flat_map(fn {app_name, app} ->
+        get_liveview_components(app)
+        |> Enum.filter(fn comp -> comp.pubsub && comp.topic != "" end)
+        |> Enum.map(fn comp ->
+          # Subscribe to the component's PubSub topic
+          Phoenix.PubSub.subscribe(comp.pubsub, comp.topic)
+
+          # Track subscription for later message routing
+          {{comp.pubsub, comp.topic}, %{
+            app_name: app_name,
+            component_id: comp.id,
+            module: comp.module,
+            update_assign: comp.update_assign
+          }}
+        end)
+      end)
+      |> Map.new()
+
+    assign(socket, :component_subscriptions, subscriptions)
   end
 
   # New 11-element app_state record with description and icon
@@ -667,7 +712,11 @@ defmodule DemoWebWeb.DashboardLive do
         id: comp[:id] || comp["id"],
         module: normalize_module(comp[:module] || comp["module"]),
         title: to_string(comp[:title] || comp["title"] || "Component"),
-        description: to_string(comp[:description] || comp["description"] || "")
+        description: to_string(comp[:description] || comp["description"] || ""),
+        # PubSub integration for real-time updates
+        pubsub: normalize_module(comp[:pubsub] || comp["pubsub"]),
+        topic: to_string(comp[:topic] || comp["topic"] || ""),
+        update_assign: comp[:update_assign] || comp["update_assign"]
       }
     end)
   end

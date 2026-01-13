@@ -240,10 +240,29 @@ defmodule DemoWebWeb.GitOpsLive do
     end
   end
 
+  # New 11-element app_state record (bc_gitops v0.5.0+)
+  defp record_to_map({:app_state, name, version, description, icon, status, path, pid, started_at, health, env}) do
+    %{
+      name: name,
+      version: version,
+      description: description,
+      icon: icon,
+      status: status,
+      path: path,
+      pid: pid,
+      started_at: started_at,
+      health: health,
+      env: env
+    }
+  end
+
+  # Legacy 9-element app_state record (bc_gitops < v0.5.0)
   defp record_to_map({:app_state, name, version, status, path, pid, started_at, health, env}) do
     %{
       name: name,
       version: version,
+      description: nil,
+      icon: nil,
       status: status,
       path: path,
       pid: pid,

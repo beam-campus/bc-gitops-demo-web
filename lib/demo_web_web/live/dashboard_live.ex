@@ -378,13 +378,33 @@ defmodule DemoWebWeb.DashboardLive do
         phx-value-app={@name}
       >
         <div class="flex justify-between items-start">
-          <div class="flex items-center gap-2">
-            <svg class={"w-4 h-4 transition-transform " <> if(@expanded, do: "rotate-90", else: "")} fill="currentColor" viewBox="0 0 20 20">
+          <div class="flex items-center gap-3">
+            <!-- App Icon -->
+            <div class="flex-shrink-0">
+              <%= if icon_value(@app) do %>
+                <img
+                  src={icon_value(@app)}
+                  alt={"#{@name} icon"}
+                  class="w-10 h-10 rounded-lg"
+                />
+              <% else %>
+                <div class="w-10 h-10 rounded-lg bg-gray-600 flex items-center justify-center">
+                  <span class="text-lg font-bold text-gray-400">
+                    <%= String.first(to_string(@name)) |> String.upcase() %>
+                  </span>
+                </div>
+              <% end %>
+            </div>
+            <!-- Expand arrow -->
+            <svg class={"w-4 h-4 transition-transform text-gray-400 " <> if(@expanded, do: "rotate-90", else: "")} fill="currentColor" viewBox="0 0 20 20">
               <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
             </svg>
             <div>
               <h3 class="font-semibold text-white"><%= @name %></h3>
               <p class="text-sm text-gray-400">v<%= get_in(@app, [:version]) || "?" %></p>
+              <%= if app_description(@app) do %>
+                <p class="text-xs text-gray-500 mt-0.5"><%= app_description(@app) %></p>
+              <% end %>
             </div>
           </div>
           <span class={
@@ -963,19 +983,23 @@ defmodule DemoWebWeb.DashboardLive do
             Success
           </div>
           <!-- Show status and health from app_state -->
-          <%= if {status, health} = extract_status_health(app_state) do %>
-            <div class="flex items-center gap-3 text-xs">
-              <span class="text-gray-500">Status:</span>
-              <span class={"font-medium " <> app_status_color(status)}><%= status %></span>
-              <span class="text-gray-500">Health:</span>
-              <span class={"font-medium " <> health_color(health)}><%= health %></span>
-            </div>
+          <%= case extract_status_health(app_state) do %>
+            <% {status, health} -> %>
+              <div class="flex items-center gap-3 text-xs">
+                <span class="text-gray-500">Status:</span>
+                <span class={"font-medium " <> app_status_color(status)}><%= status %></span>
+                <span class="text-gray-500">Health:</span>
+                <span class={"font-medium " <> health_color(health)}><%= health %></span>
+              </div>
+            <% _ -> %>
           <% end %>
           <!-- Show path if present -->
-          <%= if path = extract_path(app_state) do %>
-            <div class="text-xs text-gray-500 font-mono truncate max-w-xs" title={path}>
-              <%= path %>
-            </div>
+          <%= case extract_path(app_state) do %>
+            <% path when is_binary(path) and byte_size(path) > 0 -> %>
+              <div class="text-xs text-gray-500 font-mono truncate max-w-xs" title={path}>
+                <%= path %>
+              </div>
+            <% _ -> %>
           <% end %>
         </div>
       <% {:error, reason} -> %>
@@ -1018,6 +1042,29 @@ defmodule DemoWebWeb.DashboardLive do
   defp health_color(:healthy), do: "text-green-400"
   defp health_color(:unhealthy), do: "text-red-400"
   defp health_color(_), do: "text-gray-400"
+
+  # Extract icon value from app state
+  # The icon record has type, value, and mime_type fields
+  defp icon_value(app) when is_map(app) do
+    case app[:icon] do
+      %{value: value} when is_binary(value) -> value
+      {_, _, _, value, _} when is_binary(value) -> value  # Record tuple format
+      {:icon_spec, _, value, _} when is_binary(value) -> value
+      _ -> nil
+    end
+  end
+
+  defp icon_value(_), do: nil
+
+  # Extract description from app state
+  defp app_description(app) when is_map(app) do
+    case app[:description] do
+      desc when is_binary(desc) and byte_size(desc) > 0 -> desc
+      _ -> nil
+    end
+  end
+
+  defp app_description(_), do: nil
 
   defp format_started_at({{year, month, day}, {hour, min, sec}}) do
     "#{year}-#{pad(month)}-#{pad(day)} #{pad(hour)}:#{pad(min)}:#{pad(sec)}"
@@ -1104,16 +1151,17 @@ defmodule DemoWebWeb.DashboardLive do
   defp event_name(event), do: inspect(event)
 
   # Extract version from result's app_state tuple
-  # app_state = {:app_state, name, version, status, path, pid, started_at, health, env}
-  defp extract_version({:ok, {:app_state, _name, version, _status, _path, _pid, _started, _health, _env}}), do: version
+  # app_state = {:app_state, name, version, description, icon, status, path, pid, started_at, health, env}
+  defp extract_version({:ok, {:app_state, _name, version, _desc, _icon, _status, _path, _pid, _started, _health, _env}}), do: version
   defp extract_version(_), do: nil
 
   # Extract status and health from app_state tuple
-  defp extract_status_health({:app_state, _name, _version, status, _path, _pid, _started, health, _env}), do: {status, health}
+  # app_state record has 11 elements: {:app_state, name, version, description, icon, status, path, pid, started_at, health, env}
+  defp extract_status_health({:app_state, _name, _version, _desc, _icon, status, _path, _pid, _started, health, _env}), do: {status, health}
   defp extract_status_health(_), do: nil
 
   # Extract path from app_state tuple
-  defp extract_path({:app_state, _name, _version, _status, path, _pid, _started, _health, _env}), do: to_string(path)
+  defp extract_path({:app_state, _name, _version, _desc, _icon, _status, path, _pid, _started, _health, _env}), do: to_string(path)
   defp extract_path(_), do: nil
 
   defp reconcile_status_color(:success), do: "text-green-400"

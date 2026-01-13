@@ -21,7 +21,7 @@ defmodule DemoWeb.MixProject do
   def application do
     [
       mod: {DemoWeb.Application, []},
-      extra_applications: [:logger, :runtime_tools, :exec, :inets]
+      extra_applications: [:logger, :runtime_tools, :erlexec, :inets]
     ]
   end
 

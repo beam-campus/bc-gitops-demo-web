@@ -81,29 +81,44 @@ defmodule DemoWebWeb.TerminalChannel do
   end
 
   # Start a PTY process for the given app
+  # Note: erlexec from hex.pm doesn't have PTY support compiled in,
+  # so we use the `script` command as a PTY wrapper
   defp start_pty_process(app_name, cols, rows) do
+    Logger.debug("[Terminal] Starting PTY for #{app_name} (#{cols}x#{rows})")
+
     # Get the command for the app
     case get_app_command(app_name) do
       {:ok, cmd, args, env} ->
+        Logger.debug("[Terminal] Command: #{cmd}, Args: #{inspect(args)}")
+
+        # Build the full command string for script wrapper
+        full_cmd = Enum.join([cmd | args], " ")
+
+        # Use script as a PTY wrapper since erlexec hex package lacks PTY support
+        # script -q -c "command" /dev/null creates a pseudo-terminal
         opts = [
           :stdin,
           :stdout,
           :stderr,
           :monitor,
-          {:pty, true},
-          {:env, env},
-          {:winsz, {rows, cols}}
+          {:env, env ++ [{"COLUMNS", to_string(cols)}, {"LINES", to_string(rows)}]}
         ]
 
-        case :exec.run([cmd | args], opts) do
+        script_cmd = ["/usr/bin/script", "-q", "-c", full_cmd, "/dev/null"]
+        Logger.debug("[Terminal] Running via script: #{inspect(script_cmd)}")
+
+        case :exec.run(script_cmd, opts) do
           {:ok, pid, os_pid} ->
+            Logger.info("[Terminal] PTY started successfully, OS PID: #{os_pid}")
             {:ok, pid, os_pid}
 
           {:error, reason} ->
+            Logger.error("[Terminal] exec.run failed: #{inspect(reason)}")
             {:error, reason}
         end
 
       {:error, reason} ->
+        Logger.error("[Terminal] get_app_command failed: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -113,6 +128,8 @@ defmodule DemoWebWeb.TerminalChannel do
     # Find the demo_tui binary in the managed app's priv directory
     case find_demo_tui_binary() do
       {:ok, binary_path} ->
+        Logger.info("[Terminal] Found demo_tui binary at: #{binary_path}")
+
         env = [
           {"TERM", "xterm-256color"},
           {"COUNTER_URL", "http://localhost:8082"}
@@ -121,6 +138,7 @@ defmodule DemoWebWeb.TerminalChannel do
         {:ok, binary_path, [], env}
 
       :error ->
+        Logger.error("[Terminal] demo_tui binary not found in any search path")
         {:error, :binary_not_found}
     end
   end
@@ -137,12 +155,14 @@ defmodule DemoWebWeb.TerminalChannel do
   end
 
   defp find_demo_tui_binary do
+    arch = get_arch()
+
     # Check common locations for the demo_tui binary
     paths = [
       # From bc_gitops managed app path
       get_managed_app_path("demo_tui"),
-      # Development path
-      Path.expand("../bc-gitops-demo-tui/priv/linux-x86_64/demo-tui", __DIR__),
+      # Development path (sibling repo)
+      Path.expand("../../../../bc-gitops-demo-tui/priv/#{arch}/demo-tui", __DIR__),
       # System path
       System.find_executable("demo-tui")
     ]

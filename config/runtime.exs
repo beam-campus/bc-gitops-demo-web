@@ -23,6 +23,54 @@ end
 config :demo_web, DemoWebWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+# -----------------------------------------------------------------------------
+# Clustering Configuration (macula_cluster)
+# -----------------------------------------------------------------------------
+#
+# Macula provides two clustering strategies:
+#
+# 1. Gossip (default): Zero-config UDP multicast for LAN discovery
+#    - No configuration needed, nodes auto-discover each other
+#    - Optional: Set CLUSTER_SECRET for authenticated clusters
+#
+# 2. Static: Known node list
+#    - Set CLUSTER_NODES=demo1@node1,demo2@node2,demo3@node3
+#    - Useful when nodes have fixed names
+
+# Determine cluster strategy based on environment
+cluster_nodes = System.get_env("CLUSTER_NODES")
+cluster_strategy = System.get_env("CLUSTER_STRATEGY", "gossip")
+cluster_secret = System.get_env("CLUSTER_SECRET")
+
+if cluster_nodes && cluster_nodes != "" do
+  # Static strategy with explicit node list
+  nodes =
+    cluster_nodes
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.map(&String.to_atom/1)
+
+  config :demo_web,
+    cluster_strategy: :static,
+    cluster_nodes: nodes
+else
+  # Gossip strategy for zero-config discovery
+  config :demo_web,
+    cluster_strategy: String.to_atom(cluster_strategy)
+end
+
+# Optional cluster secret for authenticated gossip
+if cluster_secret && cluster_secret != "" do
+  config :demo_web,
+    cluster_secret: cluster_secret
+end
+
+# bc_gitops repo path for isolated VM deployments
+if repo_path = System.get_env("BC_GITOPS_REPO_PATH") do
+  config :bc_gitops, repo_path: repo_path
+end
+
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you

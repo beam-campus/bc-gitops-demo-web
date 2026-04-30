@@ -1,0 +1,48 @@
+# Docker build context exclusions
+# These files are not needed in the Docker image
+
+# Git
+.git
+.gitignore
+.github
+
+# Elixir/Phoenix build artifacts
+_build
+deps
+.elixir_ls
+.fetch
+*.ez
+
+# Node
+node_modules
+npm-debug.log
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Test artifacts
+cover/
+/test
+
+# Documentation
+doc/
+*.md
+!README.md
+
+# Local development
+.env
+.env.local
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary bc-gitops copy (created by build script)
+# This is included during build but should be in ignore
+# for normal docker build commands
+# bc-gitops  <- We actually NEED this during build!

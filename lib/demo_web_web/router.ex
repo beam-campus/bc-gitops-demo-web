@@ -23,6 +23,12 @@ defmodule DemoWebWeb.Router do
     live "/terminal/:app", TerminalLive, :app
   end
 
+  # Health check endpoint for container orchestration
+  scope "/", DemoWebWeb do
+    pipe_through :api
+    get "/health", HealthController, :index
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", DemoWebWeb do
   #   pipe_through :api

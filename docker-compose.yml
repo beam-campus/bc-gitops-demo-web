@@ -1,0 +1,118 @@
+# docker-compose.yml
+# Multi-node cluster for testing bc_gitops isolated VM deployment
+#
+# Architecture:
+#   - 3 demo_web nodes that auto-cluster via macula_cluster gossip
+#   - Uses host networking for UDP multicast gossip discovery
+#   - Each node can spawn guest apps in isolated VMs
+#   - Guest apps connect back to the cluster
+#
+# Usage:
+#   ./scripts/build-docker.sh          # Build the image
+#   docker compose up -d               # Start 3-node cluster
+#   docker compose logs -f node1       # Watch node1 logs
+#   docker compose down                # Stop cluster
+#
+# Ports (host networking):
+#   node1: 4001 (HTTP)
+#   node2: 4002 (HTTP)
+#   node3: 4003 (HTTP)
+#   UDP 45892 (gossip multicast - shared)
+
+services:
+  node1:
+    image: demo-web:latest
+    container_name: demo_web_node1
+    network_mode: host
+    environment:
+      - SHELL=/bin/bash
+      - RELEASE_NODE=demo1@localhost
+      - RELEASE_COOKIE=macula_mesh_dev
+      - PORT=4001
+      - SECRET_KEY_BASE=dev_secret_key_base_at_least_64_chars_long_for_security_purposes_here
+      - PHX_HOST=localhost
+      - BC_GITOPS_REPO_PATH=/app/gitops-repo
+      # No CLUSTER_NODES - uses gossip for auto-discovery
+      - CLUSTER_STRATEGY=gossip
+      - CLUSTER_SECRET=demo_cluster_secret
+      # Macula ports (different per node to avoid conflicts with host networking)
+      - HEALTH_PORT=8091
+      - MACULA_QUIC_PORT=9441
+    volumes:
+      - node1_data:/app/data
+      - gitops_repo:/app/gitops-repo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  node2:
+    image: demo-web:latest
+    container_name: demo_web_node2
+    network_mode: host
+    environment:
+      - SHELL=/bin/bash
+      - RELEASE_NODE=demo2@localhost
+      - RELEASE_COOKIE=macula_mesh_dev
+      - PORT=4002
+      - SECRET_KEY_BASE=dev_secret_key_base_at_least_64_chars_long_for_security_purposes_here
+      - PHX_HOST=localhost
+      - BC_GITOPS_REPO_PATH=/app/gitops-repo
+      # No CLUSTER_NODES - uses gossip for auto-discovery
+      - CLUSTER_STRATEGY=gossip
+      - CLUSTER_SECRET=demo_cluster_secret
+      # Macula ports (different per node to avoid conflicts with host networking)
+      - HEALTH_PORT=8092
+      - MACULA_QUIC_PORT=9442
+    volumes:
+      - node2_data:/app/data
+      - gitops_repo:/app/gitops-repo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - node1
+
+  node3:
+    image: demo-web:latest
+    container_name: demo_web_node3
+    network_mode: host
+    environment:
+      - SHELL=/bin/bash
+      - RELEASE_NODE=demo3@localhost
+      - RELEASE_COOKIE=macula_mesh_dev
+      - PORT=4003
+      - SECRET_KEY_BASE=dev_secret_key_base_at_least_64_chars_long_for_security_purposes_here
+      - PHX_HOST=localhost
+      - BC_GITOPS_REPO_PATH=/app/gitops-repo
+      # No CLUSTER_NODES - uses gossip for auto-discovery
+      - CLUSTER_STRATEGY=gossip
+      - CLUSTER_SECRET=demo_cluster_secret
+      # Macula ports (different per node to avoid conflicts with host networking)
+      - HEALTH_PORT=8093
+      - MACULA_QUIC_PORT=9443
+    volumes:
+      - node3_data:/app/data
+      - gitops_repo:/app/gitops-repo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - node1
+      - node2
+
+volumes:
+  node1_data:
+  node2_data:
+  node3_data:
+  gitops_repo:
+    # Shared volume for the gitops repository
+    # In production, each node would have its own clone

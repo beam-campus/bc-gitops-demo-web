@@ -11,7 +11,8 @@ defmodule DemoWeb.MixProject do
       aliases: aliases(),
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
-      listeners: [Phoenix.CodeReloader]
+      listeners: [Phoenix.CodeReloader],
+      releases: releases()
     ]
   end
 
@@ -43,6 +44,10 @@ defmodule DemoWeb.MixProject do
       # bc_gitops - the GitOps library this app hosts
       # Using path dep for development; switch to hex for release
       {:bc_gitops, path: "../bc-gitops"},
+
+      # Macula - HTTP/3 mesh with clustering support
+      # Using path dep for development; provides macula_cluster for auto-clustering
+      {:macula, path: "../../macula-io/macula"},
 
       # Phoenix
       {:phoenix, "~> 1.8.3"},
@@ -87,6 +92,17 @@ defmodule DemoWeb.MixProject do
         "phx.digest"
       ],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+    ]
+  end
+
+  defp releases do
+    [
+      demo_web: [
+        include_executables_for: [:unix],
+        steps: [:assemble, :tar],
+        applications: [demo_web: :permanent],
+        overlays: "rel/overlays"
+      ]
     ]
   end
 end

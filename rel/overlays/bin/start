@@ -1,0 +1,6 @@
+#!/bin/sh
+# Main entrypoint - starts the Phoenix server
+# For isolated VM deployments, guest apps are spawned by bc_gitops after boot
+set -eu
+cd -P -- "$(dirname -- "$0")"
+./server

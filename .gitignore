@@ -15,3 +15,5 @@ erl_crash.dump
 
 # Generated static assets (built by mix assets.build)
 /priv/static/assets/
+mix.lock
+rebar.lock
